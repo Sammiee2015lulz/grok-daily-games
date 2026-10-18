@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Asteroid Avoider - Daily Game #1</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #0ff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            border: 2px solid #0ff;
+            box-shadow: 0 0 20px #0ff;
+            background: radial-gradient(circle, #001122, #000);
+        }
+        #ui {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 18px;
+            text-shadow: 0 0 10px #0ff;
+        }
+        #gameOver {
+            display: none;
+            position: absolute;
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border: 2px solid #f0f;
+            border-radius: 10px;
+        }
+        button {
+            background: #0ff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover { background: #fff; }
+    </style>
+</head>
+<body>
+    <div id="ui">
+        Score: <span id="score">0</span> | High: <span id="high">0</span><br>
+        Use Arrow Keys or Mouse to Move
+    </div>
+    <canvas id="game" width="800" height="600"></canvas>
+    <div id="gameOver">
+        <h2>GAME OVER</h2>
+        <p>Final Score: <span id="finalScore">0</span></p>
+        <button onclick="restart()">Play Again</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const highEl = document.getElementById('high');
+        const gameOverEl = document.getElementById('gameOver');
+        const finalScoreEl = document.getElementById('finalScore');
+
+        let player = { x: 400, y: 500, w: 40, h: 20, speed: 6 };
+        let asteroids = [];
+        let particles = [];
+        let score = 0;
+        let highScore = localStorage.getItem('highScore') || 0;
+        let gameRunning = true;
+        let mouseX = 400;
+        let keys = {};
+
+        highEl.textContent = highScore;
+
+        function spawnAsteroid() {
+            if (!gameRunning) return;
+            const size = 15 + Math.random() * 25;
+            asteroids.push({
+                x: Math.random() * (canvas.width - size),
+                y: -size,
+                w: size,
+                h: size,
+                speed: 2 + Math.random() * 3 + score * 0.02,
+                rot: Math.random() * Math.PI * 2,
+                rotSpeed: (Math.random() - 0.5) * 0.1
+            });
+        }
+
+        function createExplosion(x, y) {
+            for (let i = 0; i < 20; i++) {
+                particles.push({
+                    x, y,
+                    vx: (Math.random() - 0.5) * 8,
+                    vy: (Math.random() - 0.5) * 8,
+                    life: 30,
+                    color: `hsl(${Math.random() * 60 + 180}, 100%, 50%)`
+                });
+            }
+        }
+
+        function update() {
+            if (!gameRunning) return;
+
+            // Player movement
+            if (keys['ArrowLeft'] || keys['a']) player.x -= player.speed;
+            if (keys['ArrowRight'] || keys['d']) player.x += player.speed;
+            player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
+            // Smooth mouse follow
+            player.x += (mouseX - player.x - player.w/2) * 0.1;
+
+            // Update asteroids
+            asteroids.forEach((a, i) => {
+                a.y += a.speed;
+                a.rot += a.rotSpeed;
+                if (a.y > canvas.height) {
+                    asteroids.splice(i, 1);
+                    score += 10;
+                }
+                // Collision
+                if (player.x < a.x + a.w && player.x + player.w > a.x &&
+                    player.y < a.y + a.h && player.y + player.h > a.y) {
+                    createExplosion(player.x + player.w/2, player.y);
+                    gameOver();
+                }
+            });
+
+            // Particles
+            particles.forEach((p, i) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                if (p.life <= 0) particles.splice(i, 1);
+            });
+
+            scoreEl.textContent = score;
+            if (Math.random() < 0.05 + score * 0.001) spawnAsteroid();
+        }
+
+        function draw() {
+            ctx.fillStyle = 'rgba(0, 0, 20, 0.3)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Stars background
+            ctx.fillStyle = '#fff';
+            for (let i = 0; i < 50; i++) {
+                ctx.fillRect(Math.random()*canvas.width, Math.random()*canvas.height, 1, 1);
+            }
+
+            // Player ship
+            ctx.save();
+            ctx.translate(player.x + player.w/2, player.y + player.h/2);
+            ctx.fillStyle = '#0ff';
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = '#0ff';
+            ctx.beginPath();
+            ctx.moveTo(0, -15);
+            ctx.lineTo(-20, 15);
+            ctx.lineTo(20, 15);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+
+            // Asteroids
+            asteroids.forEach(a => {
+                ctx.save();
+                ctx.translate(a.x + a.w/2, a.y + a.h/2);
+                ctx.rotate(a.rot);
+                ctx.fillStyle = '#f80';
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#f80';
+                ctx.fillRect(-a.w/2, -a.h/2, a.w, a.h);
+                ctx.restore();
+            });
+
+            // Particles
+            particles.forEach(p => {
+                ctx.fillStyle = p.color;
+                ctx.globalAlpha = p.life / 30;
+                ctx.fillRect(p.x, p.y, 3, 3);
+                ctx.globalAlpha = 1;
+            });
+        }
+
+        function gameOver() {
+            gameRunning = false;
+            finalScoreEl.textContent = score;
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('highScore', highScore);
+                highEl.textContent = highScore;
+            }
+            gameOverEl.style.display = 'block';
+        }
+
+        function restart() {
+            player.x = 400;
+            asteroids = [];
+            particles = [];
+            score = 0;
+            gameRunning = true;
+            gameOverEl.style.display = 'none';
+            scoreEl.textContent = 0;
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        // Events
+        window.addEventListener('keydown', e => keys[e.key] = true);
+        window.addEventListener('keyup', e => keys[e.key] = false);
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+        });
+
+        loop();
+        setInterval(spawnAsteroid, 800);
+    </script>
+</body>
+</html>
